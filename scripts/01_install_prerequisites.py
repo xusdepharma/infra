@@ -108,10 +108,10 @@ print()
 CLUSTER_NAME        = prompt("CLUSTER_NAME",        "EKS cluster name",
                              "pharma-dev-cluster", "pharma-dev-cluster")
 AWS_REGION          = prompt("AWS_REGION",          "AWS region where the cluster is deployed",
-                             "us-east-1", "us-east-1")
+                             "us-west-2", "us-west-2")
 ALB_CONTROLLER_ROLE = prompt("ALB_CONTROLLER_ROLE", "IAM role ARN for the AWS Load Balancer Controller",
                              "arn:aws:iam::<aws-account-id>:role/pharma-dev-alb-controller-role",
-                             "arn:aws:iam::873135413040:role/pharma-dev-alb-controller-role")
+                             "arn:aws:iam::272798209539:role/pharma-dev-alb-controller-role")
 
 default_gitops = os.path.join(DEFAULT_PROJECT_ROOT, "gitops")
 GITOPS_PATH         = prompt("GITOPS_PATH",         "Local path to your gitops repo",
@@ -239,8 +239,17 @@ run_cmd([
     "--set", f"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn={ALB_CONTROLLER_ROLE}",
     "--wait", "--timeout", "3m",
 ])
+
 log("ALB webhook certificates refreshed.")
 
+# Pod is still serving the OLD cert until it restarts and re-reads the
+# newly generated webhook-tls secret — force a rollout and wait for it.
+info("Restarting ALB controller pods to pick up new webhook cert...")
+run_cmd(["kubectl", "rollout", "restart", "deployment/aws-load-balancer-controller",
+         "-n", "kube-system"])
+run_cmd(["kubectl", "rollout", "status", "deployment/aws-load-balancer-controller",
+         "-n", "kube-system", "--timeout=120s"])
+log("ALB controller pods restarted with fresh cert.")
 # ---------------------------------------------------------------------------
 # Step 2 - ArgoCD
 # ---------------------------------------------------------------------------
